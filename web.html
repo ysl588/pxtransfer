@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Porter Bot Web Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      padding: 2em;
+    }
+    .chatbox {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 1em;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .messages {
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 1em;
+      margin-bottom: 1em;
+      background: #f9f9f9;
+    }
+    .messages p {
+      margin: 0.5em 0;
+    }
+    input, button {
+      padding: 0.5em;
+      font-size: 1em;
+    }
+    input {
+      width: 75%;
+      margin-right: 0.5em;
+    }
+  </style>
+</head>
+<body>
+  <div class="chatbox">
+    <h2>Porter Bot</h2>
+    <div class="messages" id="messages"></div>
+    <form id="chat-form">
+      <input type="text" id="user-msg" placeholder="Type your message..." required />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById("chat-form");
+    const messagesDiv = document.getElementById("messages");
+    const userId = `user_${Math.floor(Math.random() * 100000)}`; // Simulated user ID
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("user-msg");
+      const userText = input.value;
+      input.value = "";
+      messagesDiv.innerHTML += `<p><strong>You:</strong> ${userText}</p>`;
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+      const res = await fetch("/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Body: userText, From: userId })
+      });
+
+      const botReply = await res.text();
+      messagesDiv.innerHTML += `<p><strong>Bot:</strong> ${botReply}</p>`;
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Porter Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { margin: 5px; padding: 10px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        .urgent { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🏥 Porter Coordination System</h1>
+
+    <div id="porter-section">
+        <form id="signin-form">
+            Porter ID: <input type="text" id="porter_id" required>
+            <button type="submit">Sign In</button>
+        </form>
+    </div>
+
+    <div id="requester-section">
+        <form id="requester-form">
+            Requester ID (optional): <input type="text" id="requester_id">
+            <button type="submit">Sign In</button>
+        </form>
+    </div>
+
+    <div id="main-controls">
+        <h2>Request Transport</h2>
+        <form id="request-form">
+            From: <input type="text" id="from">
+            To: <input type="text" id="to" required>
+            <label><input type="checkbox" id="urgent"> Urgent</label>
+            <button type="submit">Request</button>
+        </form>
+
+        <h2>Cancel Transport</h2>
+        <form id="cancel-form">
+            Queue ID: <input type="text" id="cancel_id" required>
+            <button type="submit">Cancel</button>
+        </form>
+
+        <h2>Available Porters</h2>
+        <ul id="porter-list"></ul>
+    </div>
+
+    <h2>Active Queue</h2>
+    <table id="queue-table">
+        <thead>
+            <tr>
+                <th>Queue ID</th>
+                <th>Request Time</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Status</th>
+                <th>Status Time</th>
+                <th>Porter</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        let signedInPorter = null;
+        let requesterId = null;
+
+        async function loadQueue() {
+            const res = await fetch('/queue');
+            const data = await res.json();
+            const table = document.querySelector('#queue-table tbody');
+            table.innerHTML = '';
+            data.sort((a, b) => a.timestamp - b.timestamp);
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                const actionTd = document.createElement('td');
+
+                const createButton = (label, endpoint) => {
+                    const btn = document.createElement('button');
+                    btn.textContent = label;
+                    btn.onclick = () => act(endpoint, row.id);
+                    return btn;
+                };
+
+                if (signedInPorter && row.porter === signedInPorter) {
+                    if (row.status === 'pick up') {
+                        actionTd.appendChild(createButton('Start', '/start'));
+                    } else if (row.status === 'start transport') {
+                        actionTd.appendChild(createButton('Done', '/done'));
+                    } else if (row.status !== 'finished') {
+                        actionTd.appendChild(createButton('Cancel Pickup', '/cancel_pickup'));
+                    }
+                    if (row.status !== 'waiting') {
+                        actionTd.appendChild(createButton('Undo', '/undo'));
+                    }
+                } else if (signedInPorter && row.status === 'waiting') {
+                    actionTd.appendChild(createButton('Pickup', '/pickup'));
+                }
+
+                tr.innerHTML = `
+                    <td>${row.id}</td>
+                    <td class="${row.urgent ? 'urgent' : ''}">${row.time}</td>
+                     <td>${row.from}</td>
+                    <td>${row.to}</td>
+                    <td class="${row.urgent ? 'urgent' : ''}">
+                    ${row.urgent ? '🔥 ' : ''}${row.status}
+                        </td>
+                        <td>${row.last_updated || ''}</td>
+                        <td>${row.porter || ''}</td>
+                    `;
+                tr.appendChild(actionTd);
+                table.appendChild(tr);
+            });
+        }
+
+        async function loadPorters() {
+            const res = await fetch('/available_porters');
+            const data = await res.json();
+            const list = document.getElementById('porter-list');
+            list.innerHTML = '';
+            data.forEach(p => {
+                const li = document.createElement('li');
+                li.textContent = `${p.porter} - ${p.status}`;
+                list.appendChild(li);
+            });
+        }
+
+        async function act(url, id) {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ porter: signedInPorter, id })
+            });
+            loadQueue();
+        }
+
+        setInterval(() => {
+            loadQueue();
+            loadPorters();
+        }, 5000);
+
+        loadQueue();
+        loadPorters();
+
+        document.getElementById('signin-form').onsubmit = async e => {
+            e.preventDefault();
+            const porter = document.getElementById('porter_id').value;
+            signedInPorter = porter;
+            await fetch('/sign_in', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ porter })
+            });
+            document.getElementById('porter-section').innerHTML = `Signed in as ${porter} <button onclick="signOut()">Sign Out</button>`;
+        };
+
+        function signOut() {
+            signedInPorter = null;
+            location.reload();
+        }
+
+        document.getElementById('requester-form').onsubmit = async e => {
+            e.preventDefault();
+            requesterId = document.getElementById('requester_id').value;
+            await fetch('/requester_sign_in', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requester: requesterId })
+            });
+            document.getElementById('requester-section').innerHTML = `Requester signed in as ${requesterId}`;
+        };
+
+        document.getElementById('request-form').onsubmit = async e => {
+            e.preventDefault();
+            let from = document.getElementById('from').value;
+            const to = document.getElementById('to').value;
+            const urgent = document.getElementById('urgent').checked;
+            if (!from && requesterId) {
+                from = requesterId;
+            }
+            await fetch('/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ from, to, urgent })
+            });
+            document.getElementById('from').value = '';
+            document.getElementById('to').value = '';
+            document.getElementById('urgent').checked = false;
+            loadQueue();
+        };
+
+        document.getElementById('cancel-form').onsubmit = async e => {
+            e.preventDefault();
+            const id = document.getElementById('cancel_id').value;
+            await fetch('/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            loadQueue();
+        };
+    </script>
+</body>
+</html>
