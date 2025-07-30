@@ -1,23 +1,25 @@
 from flask import Flask, request, jsonify, render_template
 from datetime import datetime
 from flask_cors import CORS
-import os
 
 app = Flask(__name__)
 CORS(app)
 
+# ===== 全局變量 =====
 requests = []
 current_queue_id = 1
 last_reset_date = datetime.now().date()
+signed_in_porters = set()
 
-
+# ======= 頁面 =======
 @app.route('/')
 def index():
     return render_template('dashboard.html')
 
 
+# ======= 請求功能 =======
 @app.route('/request', methods=['POST'])
-def create_request():
+def request_transport():
     global current_queue_id, last_reset_date
 
     data = request.get_json()
@@ -47,7 +49,6 @@ def create_request():
 
     requests.append(new_request)
     current_queue_id += 1
-
     return jsonify({"message": "Request created", "request": new_request}), 201
 
 
@@ -133,17 +134,14 @@ def cancel_pickup():
 
 @app.route('/cancel', methods=['POST'])
 def cancel():
+    global requests
     data = request.get_json()
     req_id = int(data.get("id"))
-
-    global requests
     requests = [r for r in requests if r["id"] != req_id]
-
     return jsonify({"message": "Cancelled"})
 
 
-signed_in_porters = set()
-
+# ======= 人員登入 =======
 @app.route('/sign_in', methods=['POST'])
 def porter_sign_in():
     data = request.get_json()
@@ -161,9 +159,8 @@ def available_porters():
 
 @app.route('/requester_sign_in', methods=['POST'])
 def requester_sign_in():
-    return jsonify({"message": "Signed in"})
+    return jsonify({"message": "Requester signed in"})
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
